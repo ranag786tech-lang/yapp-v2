@@ -149,3 +149,14 @@ export interface PrivacySettings {
   passkeyCount?: number;
   linkedDevices?: LinkedDevice[];
 }
+
+export interface DeviceContact {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  avatar?: string;
+  isOnYapp?: boolean;
+  yappUser?: User;
+}
+

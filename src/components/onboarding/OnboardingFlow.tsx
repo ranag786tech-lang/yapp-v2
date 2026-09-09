@@ -40,8 +40,8 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const [showSmsBanner, setShowSmsBanner] = useState(false);
   const [otpError, setOtpError] = useState('');
 
-  // Profile setup state
-  const [profileName, setProfileName] = useState('Rana G');
+  // Profile setup state - starts completely fresh with no dummy or hardcoded names
+  const [profileName, setProfileName] = useState('');
   const [profileAbout, setProfileAbout] = useState('Hey there! I am using Yapp It.');
   const [selectedAvatar, setSelectedAvatar] = useState(
     'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80'
@@ -182,11 +182,14 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   };
 
   const handleFinishProfile = () => {
+    const finalPhone = phoneNumber.trim() 
+      ? `${selectedCountry.dialCode} ${phoneNumber.trim()}`
+      : `${selectedCountry.dialCode} ${Date.now().toString().slice(-10)}`;
     onComplete({
       name: profileName.trim() || 'Yapp User',
       about: profileAbout.trim(),
       avatar: selectedAvatar,
-      phone: `${selectedCountry.dialCode} ${phoneNumber.trim() || '98765 43210'}`,
+      phone: finalPhone,
     });
   };
 

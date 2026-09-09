@@ -22,12 +22,12 @@ import {
   Radio
 } from 'lucide-react';
 import { Chat, User, CallParticipant } from '../types';
-import { INITIAL_USERS } from '../data/mockData';
 
 interface CallModalProps {
   chat: Chat;
   callType: 'audio' | 'video';
   currentUser: User;
+  registeredUsers?: User[];
   onEndCall: () => void;
 }
 
@@ -35,6 +35,7 @@ export const CallModal = ({
   chat,
   callType: initialCallType,
   currentUser,
+  registeredUsers = [],
   onEndCall,
 }: CallModalProps) => {
   const [callType, setCallType] = useState<'audio' | 'video'>(initialCallType);
@@ -52,7 +53,11 @@ export const CallModal = ({
   // Initialize participants based on chat type (for direct chat: 2 people; for group: existing participants or up to 8-16)
   const [participants, setParticipants] = useState<CallParticipant[]>(() => {
     if (chat.type === 'direct') {
-      const otherUser = chat.participants.find((p) => p.id !== currentUser.id) || INITIAL_USERS[0];
+      const otherUser = chat.participants.find((p) => p.id !== currentUser.id) || {
+        id: 'other-user',
+        name: chat.name,
+        avatar: chat.avatar,
+      };
       return [
         {
           id: currentUser.id,

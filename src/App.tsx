@@ -11,6 +11,8 @@ import { StatusView } from './components/StatusView';
 import { PrivacySettingsView } from './components/PrivacySettingsView';
 import { SplashScreen } from './components/onboarding/SplashScreen';
 import { OnboardingFlow } from './components/onboarding/OnboardingFlow';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { 
   CURRENT_USER as DEFAULT_USER, 
   INITIAL_CHATS, 
@@ -488,7 +490,7 @@ export default function App() {
   return (
     <div 
       id="yapp-app-root" 
-      className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100 select-none"
+      className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100 select-none relative"
       style={{
         WebkitTapHighlightColor: 'transparent',
         WebkitTouchCallout: 'none',
@@ -496,6 +498,12 @@ export default function App() {
         userSelect: 'none',
       }}
     >
+      {/* PWA Slide-Down Install Popup Banner */}
+      <PWAInstallBanner />
+
+      {/* Offline Status Badge */}
+      <OfflineIndicator />
+
       <main className="flex-1 overflow-hidden relative flex items-center justify-center bg-slate-950 select-none">
         {appContent}
       </main>

@@ -12,7 +12,9 @@ import {
   Pin,
   Radio,
   Camera,
-  MoreVertical
+  MoreVertical,
+  MessageSquarePlus,
+  Smartphone
 } from 'lucide-react';
 import { Chat, User } from '../types';
 import { YappLogo } from './YappLogo';
@@ -23,6 +25,7 @@ interface SidebarProps {
   chats: Chat[];
   activeChatId: string | null;
   onSelectChat: (chatId: string) => void;
+  onOpenNewChat: () => void;
   onOpenNewGroup: () => void;
   onOpenPrivacyInfo: () => void;
   currentUser: User;
@@ -36,6 +39,7 @@ export const Sidebar = ({
   chats,
   activeChatId,
   onSelectChat,
+  onOpenNewChat,
   onOpenNewGroup,
   onOpenPrivacyInfo,
   currentUser,
@@ -59,13 +63,13 @@ export const Sidebar = ({
   });
 
   return (
-    <div id="app-sidebar" className="w-full md:w-80 lg:w-96 flex flex-col h-full bg-slate-900 border-r border-slate-800 shrink-0">
-      {/* Top Header - Authentic and clean, no debug clutter */}
+    <div id="app-sidebar" className="w-full h-full flex flex-col bg-slate-900 shrink-0 relative">
+      {/* Top Header - Authentic, full-width WhatsApp layout */}
       <div id="sidebar-header" className="p-3.5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900/95">
         <div className="flex items-center gap-3">
           <div className="relative">
             <img 
-              src={currentUser.avatar} 
+              src={currentUser.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser.name || 'user'}`} 
               alt={currentUser.name}
               className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/60"
             />
@@ -78,27 +82,34 @@ export const Sidebar = ({
                 Yapp It
               </h1>
             </div>
-            <p className="text-[11px] text-slate-400 font-mono truncate max-w-[130px]">
-              {currentUser.phone || '+91 98765 43210'}
+            <p className="text-[11px] text-slate-400 font-mono truncate max-w-[180px]">
+              {currentUser.phone || currentUser.name || 'End-to-End Encrypted'}
             </p>
           </div>
         </div>
 
-        {/* Action icons like real WhatsApp */}
-        <div className="flex items-center gap-1">
+        {/* Action buttons: New Chat + Privacy settings */}
+        <div className="flex items-center gap-2">
           <button 
-            id="create-group-btn"
-            onClick={onOpenNewGroup}
-            title="Create New Group"
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            type="button"
+            id="header-new-chat-btn"
+            onClick={onOpenNewChat}
+            title="Start New Chat (View Device / SIM Contacts)"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
           >
-            <Users className="w-4 h-4" />
+            <MessageSquarePlus className="w-4 h-4" />
+            <span>New Chat</span>
+            <span className="w-4 h-4 rounded-full bg-slate-950/20 flex items-center justify-center font-black text-xs leading-none ml-0.5">
+              +
+            </span>
           </button>
+
           <button 
+            type="button"
             id="privacy-shield-btn"
             onClick={() => onTabChange('settings')}
             title="Privacy & Permissions Settings"
-            className="p-2 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+            className="p-2 text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-colors cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4" />
           </button>
@@ -108,8 +119,9 @@ export const Sidebar = ({
       {/* Main Feature Tabs (Chats, Calls, Status, Settings) */}
       <div className="grid grid-cols-4 border-b border-slate-800 bg-slate-950/60 text-xs shrink-0 select-none">
         <button
+          type="button"
           onClick={() => onTabChange('chats')}
-          className={`py-2.5 flex flex-col items-center justify-center gap-1 transition-all border-b-2 ${
+          className={`py-3 flex flex-col items-center justify-center gap-1 transition-all border-b-2 ${
             activeTab === 'chats'
               ? 'border-emerald-400 text-emerald-400 font-bold bg-slate-800/40'
               : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -123,110 +135,106 @@ export const Sidebar = ({
               </span>
             )}
           </div>
-          <span className="text-[10px]">Chats</span>
+          <span className="text-[11px]">Chats</span>
         </button>
 
         <button
+          type="button"
           onClick={() => onTabChange('calls')}
-          className={`py-2.5 flex flex-col items-center justify-center gap-1 transition-all border-b-2 ${
+          className={`py-3 flex flex-col items-center justify-center gap-1 transition-all border-b-2 ${
             activeTab === 'calls'
               ? 'border-emerald-400 text-emerald-400 font-bold bg-slate-800/40'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
           <Phone className="w-4 h-4" />
-          <span className="text-[10px]">Calls</span>
+          <span className="text-[11px]">Calls</span>
         </button>
 
         <button
+          type="button"
           onClick={() => onTabChange('status')}
-          className={`py-2.5 flex flex-col items-center justify-center gap-1 transition-all border-b-2 ${
+          className={`py-3 flex flex-col items-center justify-center gap-1 transition-all border-b-2 ${
             activeTab === 'status'
               ? 'border-emerald-400 text-emerald-400 font-bold bg-slate-800/40'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
           <Radio className="w-4 h-4" />
-          <span className="text-[10px]">Status</span>
+          <span className="text-[11px]">Status</span>
         </button>
 
         <button
+          type="button"
           onClick={() => onTabChange('settings')}
-          className={`py-2.5 flex flex-col items-center justify-center gap-1 transition-all border-b-2 ${
+          className={`py-3 flex flex-col items-center justify-center gap-1 transition-all border-b-2 ${
             activeTab === 'settings'
               ? 'border-emerald-400 text-emerald-400 font-bold bg-slate-800/40'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
           <SettingsIcon className="w-4 h-4" />
-          <span className="text-[10px]">Settings</span>
+          <span className="text-[11px]">Settings</span>
         </button>
       </div>
 
-      {/* When in Chats Tab, show Search, Filters, and Chat List */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Security notice bar */}
-        <div 
-          id="encryption-badge" 
-          onClick={onOpenPrivacyInfo}
-          className="mx-3 mt-3 px-3 py-1.5 bg-emerald-950/40 border border-emerald-800/40 rounded-xl flex items-center gap-2 text-xs text-emerald-300 cursor-pointer hover:bg-emerald-950/60 transition-colors shrink-0"
-        >
-          <Lock className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-          <span className="truncate text-[11px]">End-to-end encrypted chats &amp; calls</span>
-          <span className="ml-auto text-[9px] font-bold text-emerald-400 shrink-0">VIEW</span>
-        </div>
-
-        {/* Search Input */}
-        <div className="p-3 shrink-0">
+      {/* Chats Tab View */}
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative">
+        {/* Search Bar */}
+        <div className="p-3 border-b border-slate-800 shrink-0">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
-              id="chat-search-input"
               type="text"
-              placeholder="Search chats, groups, or messages..."
+              id="search-chats-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-800/80 border border-slate-700/60 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+              placeholder="Search chats or messages..."
+              className="w-full pl-9 pr-4 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
             />
           </div>
 
-          {/* Filter Pills */}
-          <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto pb-1 text-xs">
+          {/* Quick Filters */}
+          <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1 text-xs">
             <button
+              type="button"
               onClick={() => setFilter('all')}
-              className={`px-3 py-1 rounded-full text-[11px] font-medium transition-colors whitespace-nowrap ${
-                filter === 'all' 
-                  ? 'bg-emerald-500 text-slate-950 font-bold' 
+              className={`px-3 py-1 rounded-full whitespace-nowrap transition-colors ${
+                filter === 'all'
+                  ? 'bg-emerald-500 text-slate-950 font-bold'
                   : 'bg-slate-800 text-slate-400 hover:text-slate-200'
               }`}
             >
               All
             </button>
             <button
+              type="button"
               onClick={() => setFilter('unread')}
-              className={`px-3 py-1 rounded-full text-[11px] font-medium transition-colors whitespace-nowrap ${
-                filter === 'unread' 
-                  ? 'bg-emerald-500 text-slate-950 font-bold' 
+              className={`px-3 py-1 rounded-full whitespace-nowrap transition-colors ${
+                filter === 'unread'
+                  ? 'bg-emerald-500 text-slate-950 font-bold'
                   : 'bg-slate-800 text-slate-400 hover:text-slate-200'
               }`}
             >
               Unread
             </button>
             <button
+              type="button"
               onClick={() => setFilter('direct')}
-              className={`px-3 py-1 rounded-full text-[11px] font-medium transition-colors whitespace-nowrap ${
-                filter === 'direct' 
-                  ? 'bg-emerald-500 text-slate-950 font-bold' 
+              className={`px-3 py-1 rounded-full whitespace-nowrap transition-colors ${
+                filter === 'direct'
+                  ? 'bg-emerald-500 text-slate-950 font-bold'
                   : 'bg-slate-800 text-slate-400 hover:text-slate-200'
               }`}
             >
               Direct
             </button>
             <button
+              type="button"
               onClick={() => setFilter('group')}
-              className={`px-3 py-1 rounded-full text-[11px] font-medium transition-colors whitespace-nowrap ${
-                filter === 'group' 
-                  ? 'bg-emerald-500 text-slate-950 font-bold' 
+              className={`px-3 py-1 rounded-full whitespace-nowrap transition-colors ${
+                filter === 'group'
+                  ? 'bg-emerald-500 text-slate-950 font-bold'
                   : 'bg-slate-800 text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -235,12 +243,28 @@ export const Sidebar = ({
           </div>
         </div>
 
-        {/* Chat List */}
-        <div id="chats-scroll-list" className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
+        {/* Chats List */}
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
           {filteredChats.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-sm">
-              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              No chats found
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4">
+              <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-inner">
+                <MessageSquare className="w-8 h-8" />
+              </div>
+              <div className="max-w-xs space-y-1.5">
+                <h3 className="text-base font-bold text-white">No chats yet</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Start fresh with private encrypted messaging. Tap <strong>New Chat (+)</strong> to connect with real contacts from your device or SIM card.
+                </p>
+              </div>
+              <button
+                type="button"
+                id="empty-state-new-chat-btn"
+                onClick={onOpenNewChat}
+                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Start New Chat</span>
+              </button>
             </div>
           ) : (
             filteredChats.map((chat) => {
@@ -253,16 +277,16 @@ export const Sidebar = ({
                     onTabChange('chats');
                     onSelectChat(chat.id);
                   }}
-                  className={`p-3 flex items-center gap-3 cursor-pointer transition-colors relative ${
+                  className={`p-3.5 flex items-center gap-3.5 cursor-pointer transition-colors relative ${
                     isActive 
-                      ? 'bg-emerald-500/10 border-l-2 border-emerald-500' 
+                      ? 'bg-emerald-500/10 border-l-4 border-emerald-500' 
                       : 'hover:bg-slate-800/50'
                   }`}
                 >
                   {/* Avatar */}
                   <div className="relative shrink-0">
                     <img
-                      src={chat.avatar}
+                      src={chat.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${chat.name}`}
                       alt={chat.name}
                       className="w-12 h-12 rounded-full object-cover"
                     />
@@ -301,10 +325,10 @@ export const Sidebar = ({
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1 text-xs text-slate-400 truncate">
                         {chat.lastMessage?.status && (
-                          <CheckCheck className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                          <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         )}
                         <span className="truncate">
-                          {chat.lastMessage ? chat.lastMessage.text : 'Start conversation...'}
+                          {chat.lastMessage ? chat.lastMessage.text : 'Tap to chat...'}
                         </span>
                       </div>
 
@@ -321,20 +345,35 @@ export const Sidebar = ({
           )}
         </div>
 
+        {/* Floating Action Button for New Chat (+) */}
+        <button
+          type="button"
+          id="floating-new-chat-fab"
+          onClick={onOpenNewChat}
+          className="absolute bottom-16 right-6 p-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-2xl shadow-2xl shadow-emerald-500/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 font-bold text-sm z-30 group cursor-pointer"
+          title="New Chat (+)"
+        >
+          <Plus className="w-5 h-5 stroke-[2.5]" />
+          <span className="hidden sm:inline">New Chat</span>
+        </button>
+
         {/* Bottom Profile Bar */}
-        <div id="sidebar-footer" className="p-3 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between shrink-0">
+        <div id="sidebar-footer" className="p-3 border-t border-slate-800 bg-slate-900/95 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
             <span className="text-xs text-slate-400 truncate">
-              Yapp Network: <strong className="text-emerald-400 font-medium">Encrypted</strong>
+              Encrypted Real-Time Network
             </span>
           </div>
+
           <button 
-            onClick={onOpenNewGroup}
-            className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
+            type="button"
+            id="footer-new-chat-btn"
+            onClick={onOpenNewChat}
+            className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
-            New Group
+            <span>New Chat</span>
+            <span className="w-4 h-4 rounded-full bg-slate-950/20 flex items-center justify-center font-black text-xs leading-none">+</span>
           </button>
         </div>
       </div>

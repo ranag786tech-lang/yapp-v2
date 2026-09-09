@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with phone number and real-time presence",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique user ID (auth UID)" },
+        "phoneNumber": { "type": "string", "description": "Standardized contact phone number" },
+        "name": { "type": "string", "description": "Display name" },
+        "avatar": { "type": "string", "description": "Avatar URL or preset" },
+        "about": { "type": "string", "description": "Status text" },
+        "isOnline": { "type": "boolean", "description": "Online presence status" },
+        "lastSeen": { "type": "string", "description": "ISO timestamp of last activity" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of account creation" }
+      },
+      "required": ["id", "phoneNumber", "name", "createdAt"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "Chat session between users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Chat ID" },
+        "type": { "type": "string", "enum": ["direct", "group"] },
+        "name": { "type": "string", "description": "Chat name or other user name" },
+        "participantIds": { "type": "array", "description": "List of participant user IDs" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of chat creation" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last message" }
+      },
+      "required": ["id", "type", "participantIds", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message within a chat conversation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Message ID" },
+        "chatId": { "type": "string", "description": "Parent chat ID" },
+        "senderId": { "type": "string", "description": "UID of sender" },
+        "senderName": { "type": "string", "description": "Sender display name" },
+        "text": { "type": "string", "description": "Message text content" },
+        "timestamp": { "type": "string", "description": "ISO timestamp" },
+        "status": { "type": "string", "enum": ["sent", "delivered", "read"] },
+        "mediaType": { "type": "string", "enum": ["image", "audio", "video", "file"] },
+        "mediaUrl": { "type": "string", "description": "Optional media payload URL" }
+      },
+      "required": ["id", "chatId", "senderId", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "entity": "User",
+      "description": "Registered user accounts and presence status"
+    },
+    "/chats/{chatId}": {
+      "entity": "Chat",
+      "description": "Active chat conversations"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "entity": "Message",
+      "description": "Chat message items"
+    }
+  }
+}

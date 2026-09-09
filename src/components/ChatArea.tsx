@@ -385,9 +385,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div className="flex items-center gap-3 min-w-0">
           {onBackToSidebar && (
             <button 
+              type="button"
+              id="chat-back-to-list-btn"
               onClick={onBackToSidebar}
-              className="md:hidden p-1.5 -ml-1 text-slate-300 hover:text-white rounded-lg"
-              title="Back"
+              className="p-2 -ml-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition-colors shrink-0"
+              title="Back to all chats"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
