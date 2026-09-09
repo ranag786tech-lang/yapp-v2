@@ -1,0 +1,3 @@
+{
+  "name":"yapp-v2","version":"1.0.0","private":true,"scripts":{"dev":"next dev","build":"next build","start":"next start","lint":"next lint"},"dependencies":{"clsx":"^2.1.1","framer-motion":"^13.2.0","lucide-react":"^1.43.0","next":"^16.3.4","react":"^19.2.8","react-dom":"^19.2.8","tailwind-merge":"^3.6.0"},"devDependencies":{"@tailwindcss/postcss":"^4.3.3","@types/node":"^26.5.0","@types/react":"^19.2.18","@types/react-dom":"^19.2.7","postcss":"^8.5.28","tailwindcss":"^4.3.3","typescript":"^7.0.2"},"packageManager":"pnpm@10.34.3"
+}
