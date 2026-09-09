@@ -1,0 +1,11 @@
+{
+  "name": "Yapp It",
+  "description": "Instant messaging, group connectivity, and high-clarity calling platform with end-to-end encryption.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

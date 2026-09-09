@@ -1,0 +1,39 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="yappBubbleGradient" x1="15" y1="15" x2="185" y2="185" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8cf226" />
+      <stop offset="30%" stop-color="#4ade80" />
+      <stop offset="70%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#0d9488" />
+    </linearGradient>
+  </defs>
+  <path
+    d="M 45 20
+       L 155 20
+       A 35 35 0 0 1 190 55
+       L 190 135
+       A 35 35 0 0 1 155 170
+       L 115 170
+       C 107 170 104 174 100 188
+       C 96 174 93 170 85 170
+       L 45 170
+       A 35 35 0 0 1 10 135
+       L 10 55
+       A 35 35 0 0 1 45 20
+       Z"
+    fill="url(#yappBubbleGradient)"
+  />
+  <path
+    d="M 68 56
+       L 91 102
+       L 91 146
+       L 109 146
+       L 109 102
+       L 132 56
+       L 114 56
+       L 100 88
+       L 86 56
+       Z"
+    fill="#046c64"
+  />
+</svg>
