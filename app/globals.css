@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+:root { --background:#f7faf8; --foreground:#14211b; --card:#ffffff; --muted:#eef4f0; --muted-foreground:#718078; --border:#e4ece7; --primary:#1f9d69; --primary-foreground:#ffffff; --accent:#dff5e8; --ring:#8bd3ad; }
+.dark { --background:#101613; --foreground:#e8f2eb; --card:#17211c; --muted:#202c25; --muted-foreground:#9aaba1; --border:#2a3830; --primary:#42c987; --primary-foreground:#092016; --accent:#1f4733; --ring:#42c987; }
+@theme inline { --color-background:var(--background); --color-foreground:var(--foreground); --color-card:var(--card); --color-muted:var(--muted); --color-muted-foreground:var(--muted-foreground); --color-border:var(--border); --color-primary:var(--primary); --color-primary-foreground:var(--primary-foreground); --color-accent:var(--accent); --color-ring:var(--ring); --font-sans:var(--font-geist); --font-mono:var(--font-geist-mono); }
+* { border-color:var(--border); }
+body { background:var(--background); color:var(--foreground); font-family:var(--font-geist), Arial, sans-serif; }
+button, input, textarea { font:inherit; }
