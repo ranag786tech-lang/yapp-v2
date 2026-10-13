@@ -6,10 +6,10 @@ export interface Country {
 }
 
 export const COUNTRIES: Country[] = [
+  { name: 'Pakistan', code: 'PK', dialCode: '+92', flag: '🇵🇰' },
   { name: 'India', code: 'IN', dialCode: '+91', flag: '🇮🇳' },
   { name: 'United States', code: 'US', dialCode: '+1', flag: '🇺🇸' },
   { name: 'United Kingdom', code: 'GB', dialCode: '+44', flag: '🇬🇧' },
-  { name: 'Pakistan', code: 'PK', dialCode: '+92', flag: '🇵🇰' },
   { name: 'United Arab Emirates', code: 'AE', dialCode: '+971', flag: '🇦🇪' },
   { name: 'Saudi Arabia', code: 'SA', dialCode: '+966', flag: '🇸🇦' },
   { name: 'Canada', code: 'CA', dialCode: '+1', flag: '🇨🇦' },

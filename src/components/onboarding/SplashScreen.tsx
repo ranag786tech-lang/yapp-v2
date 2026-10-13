@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { YappLogo } from '../YappLogo';
 import { ShieldCheck } from 'lucide-react';
 
@@ -7,14 +7,17 @@ interface SplashScreenProps {
 }
 
 export const SplashScreen = ({ onFinish }: SplashScreenProps) => {
+  const onFinishRef = useRef(onFinish);
+  onFinishRef.current = onFinish;
+
   useEffect(() => {
     // Clean, quick, authentic WhatsApp-style opening
     const timer = setTimeout(() => {
-      onFinish();
-    }, 1200);
+      onFinishRef.current?.();
+    }, 1000);
 
     return () => clearTimeout(timer);
-  }, [onFinish]);
+  }, []);
 
   return (
     <div

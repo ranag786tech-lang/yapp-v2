@@ -75,8 +75,8 @@ export default function App() {
     const unsubscribe = observeAuthState(async (fbUser) => {
       let activeUid = fbUser?.uid;
       if (!activeUid) {
-        // Check for verified session in sessionStorage if Firebase SMS regional policy used fallback verification
-        const storedUid = sessionStorage.getItem('yapp_auth_active_user_id');
+        // Check for verified session in storage if Firebase SMS regional policy used fallback verification
+        const storedUid = sessionStorage.getItem('yapp_auth_active_user_id') || localStorage.getItem('yapp_auth_active_user_id');
         if (storedUid) {
           activeUid = storedUid;
         }
@@ -95,7 +95,7 @@ export default function App() {
         const profile = await getUserProfileFromFirestore(activeUid);
         
         // Fetch persistent permissions from Firestore path users/{uid}/settings
-        await getUserPermissions(activeUid);
+        await getUserPermissions(activeUid).catch(() => null);
 
         // Record authentic session in Firestore users/{uid}/devices
         recordCurrentDeviceSession(activeUid).catch(console.warn);
@@ -105,21 +105,23 @@ export default function App() {
           setAppStage('dashboard');
         } else {
           // Firebase authenticated via phone, profile name pending
-          setCurrentUser({
+          setCurrentUser((prev) => ({
             ...DEFAULT_USER,
+            ...prev,
             id: activeUid,
-            phone: fbUser?.phoneNumber || '',
-          });
-          setAppStage('onboarding');
+            phone: fbUser?.phoneNumber || prev.phone || '',
+          }));
+          setAppStage((prev) => (prev === 'dashboard' ? 'dashboard' : 'onboarding'));
         }
       } catch (err) {
         console.warn('Notice synchronizing Firebase user state:', err);
-        setCurrentUser({
+        setCurrentUser((prev) => ({
           ...DEFAULT_USER,
+          ...prev,
           id: activeUid,
-          phone: fbUser?.phoneNumber || '',
-        });
-        setAppStage('onboarding');
+          phone: fbUser?.phoneNumber || prev.phone || '',
+        }));
+        setAppStage((prev) => (prev === 'dashboard' ? 'dashboard' : 'onboarding'));
       } finally {
         setIsAuthChecking(false);
       }
@@ -371,6 +373,7 @@ export default function App() {
     };
     setCurrentUser(updatedUser);
     sessionStorage.setItem('yapp_auth_active_user_id', updatedUser.id);
+    localStorage.setItem('yapp_auth_active_user_id', updatedUser.id);
     try {
       await saveUserToFirestore(updatedUser);
       await recordCurrentDeviceSession(updatedUser.id);
@@ -387,6 +390,7 @@ export default function App() {
       console.warn('Sign out error:', err);
     }
     sessionStorage.removeItem('yapp_auth_active_user_id');
+    localStorage.removeItem('yapp_auth_active_user_id');
     setCurrentUser(DEFAULT_USER);
     setAppStage('onboarding');
     setActiveChatId(null);

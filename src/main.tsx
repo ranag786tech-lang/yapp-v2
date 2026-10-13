@@ -8,23 +8,28 @@ import { purgeMockStorage } from './lib/cleanSlate';
 // Bootstrap clean slate: purge any legacy mock data in storage
 purgeMockStorage();
 
-// Auto-register service worker for caching, installability and offline support
+// In development, unregister any active service workers to prevent refresh loops & stale caching
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/service-worker.js')
-      .then((r) => {
-        console.log('Yapp It PWA Service Worker registered:', r?.scope);
-      })
-      .catch((err) => {
-        console.warn('Yapp It SW registration note:', err);
-      });
-  });
+  if (import.meta.env.DEV) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister().catch(() => {});
+      }
+    });
+  } else {
+    // In production, safely register service worker for PWA
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/service-worker.js')
+        .then((r) => {
+          console.log('Yapp It PWA Service Worker registered:', r?.scope);
+        })
+        .catch((err) => {
+          console.warn('Yapp It SW registration note:', err);
+        });
+    });
+  }
 }
-
-registerSW({
-  immediate: true,
-});
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
