@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Chat, User } from '../types';
 import { YappLogo } from './YappLogo';
+import { useChatDrafts } from '../lib/draftStore';
 
 export type SidebarTab = 'chats' | 'calls' | 'status' | 'settings';
 
@@ -48,12 +49,15 @@ export const Sidebar = ({
 }: SidebarProps) => {
   const [filter, setFilter] = useState<'all' | 'unread' | 'direct' | 'group'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const drafts = useChatDrafts();
 
   const totalUnread = chats.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
 
   const filteredChats = chats.filter((chat) => {
+    const draftText = drafts[chat.id] || '';
     const matchesSearch = chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      chat.lastMessage?.text.toLowerCase().includes(searchQuery.toLowerCase());
+      chat.lastMessage?.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      draftText.toLowerCase().includes(searchQuery.toLowerCase());
     
     if (!matchesSearch) return false;
     if (filter === 'unread') return chat.unreadCount > 0;
@@ -323,14 +327,23 @@ export const Sidebar = ({
                     </div>
 
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1 text-xs text-slate-400 truncate">
-                        {chat.lastMessage?.status && (
-                          <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        )}
-                        <span className="truncate">
-                          {chat.lastMessage ? chat.lastMessage.text : 'Tap to chat...'}
-                        </span>
-                      </div>
+                      {drafts[chat.id] ? (
+                        <div className="flex items-center gap-1.5 text-xs truncate">
+                          <span className="text-emerald-400 font-bold tracking-tight shrink-0">Draft:</span>
+                          <span className="text-slate-200 italic truncate font-normal">
+                            {drafts[chat.id]}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-xs text-slate-400 truncate">
+                          {chat.lastMessage?.status && (
+                            <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          )}
+                          <span className="truncate">
+                            {chat.lastMessage ? chat.lastMessage.text : 'Tap to chat...'}
+                          </span>
+                        </div>
+                      )}
 
                       {chat.unreadCount > 0 && (
                         <span className="bg-emerald-500 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shrink-0">

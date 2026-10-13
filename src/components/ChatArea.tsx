@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Chat, Message, User, PollData } from '../types';
 import { CreatePollModal } from './CreatePollModal';
+import { getChatDraft, saveChatDraft, clearChatDraft } from '../lib/draftStore';
 
 interface ChatAreaProps {
   chat: Chat;
@@ -73,7 +74,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onOpenPrivacyInfo,
   onBackToSidebar,
 }) => {
-  const [inputText, setInputText] = useState('');
+  // Initialize inputText from local draft persistence
+  const [inputText, setInputText] = useState(() => getChatDraft(chat.id));
   const [mediaDrawerTab, setMediaDrawerTab] = useState<'emoji' | 'sticker' | 'gif' | null>(null);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [showPollModal, setShowPollModal] = useState(false);
@@ -85,6 +87,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatIdRef = useRef(chat.id);
+  const inputTextRef = useRef(inputText);
+
+  // Keep refs synchronized for safe unmount persistence
+  useEffect(() => {
+    chatIdRef.current = chat.id;
+  }, [chat.id]);
+
+  useEffect(() => {
+    inputTextRef.current = inputText;
+  }, [inputText]);
+
+  // When switching chats, reload the draft for the new chat
+  useEffect(() => {
+    const savedDraft = getChatDraft(chat.id);
+    setInputText(savedDraft);
+  }, [chat.id]);
+
+  // Save draft on component unmount (e.g. user navigates away to calls, settings, or back to sidebar)
+  useEffect(() => {
+    return () => {
+      if (chatIdRef.current) {
+        saveChatDraft(chatIdRef.current, inputTextRef.current);
+      }
+    };
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -110,6 +138,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setInputText(val);
+    saveChatDraft(chat.id, val);
 
     // Detect @ symbol for mentions
     const lastWord = val.split(' ').pop() || '';
@@ -124,15 +153,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const words = inputText.split(' ');
     words.pop(); // Remove the incomplete @
     words.push(mentionTag + ' ');
-    setInputText(words.join(' '));
+    const updated = words.join(' ');
+    setInputText(updated);
+    saveChatDraft(chat.id, updated);
     setShowMentionPopup(false);
   };
 
   const handleSendText = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputText.trim()) return;
-    onSendMessage(inputText.trim());
+    const textToSend = inputText.trim();
+    if (!textToSend) return;
+    onSendMessage(textToSend);
     setInputText('');
+    clearChatDraft(chat.id);
     setMediaDrawerTab(null);
     setShowMentionPopup(false);
   };
@@ -704,7 +737,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     key={emoji}
                     type="button"
                     onClick={() => {
-                      setInputText((prev) => prev + emoji);
+                      setInputText((prev) => {
+                        const updated = prev + emoji;
+                        saveChatDraft(chat.id, updated);
+                        return updated;
+                      });
                       setMediaDrawerTab(null);
                     }}
                     className="p-2 text-xl hover:bg-slate-800 rounded-lg transition-transform active:scale-125 text-center"
@@ -760,6 +797,33 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         className="hidden"
         accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
       />
+
+      {/* Un-sent message draft persistence banner */}
+      {inputText.trim() && (
+        <div 
+          id="chat-draft-indicator"
+          className="px-3.5 py-1.5 bg-slate-900/95 border-t border-slate-800 flex items-center justify-between text-xs select-none shrink-0"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+            <span className="text-slate-300 truncate text-[11px] font-medium">
+              Draft saved locally • You won&apos;t lose this message if you navigate away
+            </span>
+          </div>
+          <button
+            type="button"
+            id="discard-draft-btn"
+            onClick={() => {
+              setInputText('');
+              clearChatDraft(chat.id);
+            }}
+            className="text-[11px] text-slate-400 hover:text-red-400 hover:underline transition-colors shrink-0 font-medium ml-2 cursor-pointer"
+            title="Discard this un-sent draft"
+          >
+            Discard
+          </button>
+        </div>
+      )}
 
       {/* Message Input Form */}
       <form

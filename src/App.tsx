@@ -21,6 +21,7 @@ import {
 import { Chat, Message, User, CallLog, StatusStory, PrivacySettings } from './types';
 import { observeAuthState, signOutUser } from './lib/firebase';
 import { purgeMockStorage } from './lib/cleanSlate';
+import { clearChatDraft } from './lib/draftStore';
 import { 
   subscribeToRegisteredUsers, 
   saveUserToFirestore, 
@@ -186,6 +187,9 @@ export default function App() {
     audioDuration?: string
   ) => {
     if (!activeChatId || !activeChat) return;
+
+    // Clear any persistent local draft for this chat
+    clearChatDraft(activeChatId);
 
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
