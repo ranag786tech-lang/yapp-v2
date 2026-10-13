@@ -1,6 +1,13 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getAuth, signInAnonymously, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  setPersistence, 
+  browserLocalPersistence, 
+  signOut,
+  User as FirebaseUser 
+} from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase App
@@ -14,26 +21,24 @@ export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestore
 // Initialize Firebase Authentication
 export const auth = getAuth(app);
 
-// Ensure user is authenticated
-export async function ensureAuth(): Promise<FirebaseUser> {
-  if (auth.currentUser) {
-    return auth.currentUser;
-  }
-  return new Promise((resolve, reject) => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        unsubscribe();
-        resolve(user);
-      } else {
-        try {
-          const cred = await signInAnonymously(auth);
-          unsubscribe();
-          resolve(cred.user);
-        } catch (error) {
-          unsubscribe();
-          reject(error);
-        }
-      }
-    });
+// Enforce browserLocalPersistence to maintain authentic sessions across reloads
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.warn('Firebase Auth persistence configuration warning:', err);
+});
+
+/**
+ * Observe authentic Firebase Auth state changes
+ * Zero mock logic: returns null when unauthenticated
+ */
+export function observeAuthState(callback: (user: FirebaseUser | null) => void) {
+  return onAuthStateChanged(auth, (user) => {
+    callback(user);
   });
+}
+
+/**
+ * Sign out current Firebase user
+ */
+export async function signOutUser(): Promise<void> {
+  await signOut(auth);
 }

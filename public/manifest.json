@@ -1,14 +1,13 @@
 {
-  "id": "/",
   "name": "Yapp It",
-  "short_name": "Yapp It",
-  "description": "Instant messaging, group connectivity, and high-clarity calling platform with end-to-end encryption.",
+  "short_name": "Yapp",
+  "description": "Real-time instant messaging and high-clarity calling platform with end-to-end encryption.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "theme_color": "#020617",
-  "background_color": "#020617",
+  "theme_color": "#075E54",
+  "background_color": "#075E54",
   "categories": ["social", "communication", "productivity"],
   "icons": [
     {

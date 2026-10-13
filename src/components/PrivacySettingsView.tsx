@@ -31,17 +31,28 @@ import {
   X,
   ExternalLink,
   Download,
-  Zap
+  Zap,
+  LogOut
 } from 'lucide-react';
 import { PrivacySettings, User, LinkedDevice } from '../types';
 import { AboutEcosystemModal } from './AboutEcosystemModal';
 import { usePWAInstall } from '../hooks/usePWAInstall';
+import { 
+  subscribeToUserDevices, 
+  unlinkUserDevice, 
+  recordCurrentDeviceSession,
+  getUserPermissions,
+  saveUserPermissions,
+  DEFAULT_PERMISSION_STATES
+} from '../lib/firestoreService';
+import { signOutUser } from '../lib/firebase';
 
 interface PrivacySettingsViewProps {
   settings: PrivacySettings;
   currentUser: User;
   onUpdateSettings: (newSettings: Partial<PrivacySettings>) => void;
   onBack?: () => void;
+  onSignOut?: () => void;
 }
 
 export const PrivacySettingsView: React.FC<PrivacySettingsViewProps> = ({
@@ -49,6 +60,7 @@ export const PrivacySettingsView: React.FC<PrivacySettingsViewProps> = ({
   currentUser,
   onUpdateSettings,
   onBack,
+  onSignOut,
 }) => {
   const [activeTab, setActiveTab] = useState<'privacy' | 'security' | 'devices' | 'permissions'>('privacy');
   const [showSavedFeedback, setShowSavedFeedback] = useState(false);
@@ -60,54 +72,47 @@ export const PrivacySettingsView: React.FC<PrivacySettingsViewProps> = ({
   // PWA install hook
   const { isInstalled, openBanner, install } = usePWAInstall();
 
-  // App-level permission manager state
-  const [permissionStates, setPermissionStates] = useState<Record<string, boolean>>({
-    camera: true,
-    microphone: true,
-    biometric: true,
-    contacts: true,
-    phone: true,
-    sms: true,
-    location: false,
-    storage: true,
-    network: true,
-    foreground: true,
-    screen_guard: true,
-    bluetooth: true,
-    notifications: true,
-  });
+  // App-level persistent permission state from Firestore users/{uid}/settings
+  const [permissionStates, setPermissionStates] = useState<Record<string, boolean>>(DEFAULT_PERMISSION_STATES);
 
-  const [linkedDevices, setLinkedDevices] = useState<LinkedDevice[]>(
-    settings.linkedDevices || [
-      {
-        id: 'dev-1',
-        name: 'Yapp It Web',
-        platform: 'web',
-        browserOrOs: 'Google Chrome 128 on macOS',
-        lastActive: 'Active now (This browser)',
-        isCurrent: true,
-        location: 'New Delhi, India',
-      },
-      {
-        id: 'dev-2',
-        name: 'Yapp It Desktop',
-        platform: 'desktop',
-        browserOrOs: 'Windows 11 Native 64-bit',
-        lastActive: 'Yesterday at 8:40 PM',
-        isCurrent: false,
-        location: 'Mumbai, India',
-      },
-      {
-        id: 'dev-3',
-        name: 'Yapp It for Tablet',
-        platform: 'tablet',
-        browserOrOs: 'iPadOS 17.5',
-        lastActive: '3 days ago',
-        isCurrent: false,
-        location: 'Bangalore, India',
-      },
-    ]
-  );
+  // Dynamic Device Management: strictly empty state by default, populated only from authentic Firebase backend
+  const [linkedDevices, setLinkedDevices] = useState<LinkedDevice[]>([]);
+
+  // 1. Dynamic Device Management: Subscribe to authentic Firebase device sessions
+  React.useEffect(() => {
+    if (!currentUser?.id) {
+      setLinkedDevices([]);
+      return;
+    }
+
+    // Register active authenticated session in Firebase
+    recordCurrentDeviceSession(currentUser.id).catch((err) => {
+      console.warn('Session registration note:', err);
+    });
+
+    // Listen to active sessions from Firestore
+    const unsubscribe = subscribeToUserDevices(currentUser.id, (devices) => {
+      setLinkedDevices(devices);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [currentUser?.id]);
+
+  // 2. Persistent Permission Synchronization: Fetch settings from Firestore users/{uid}/settings on mount
+  React.useEffect(() => {
+    if (!currentUser?.id) return;
+    getUserPermissions(currentUser.id)
+      .then((savedPermissions) => {
+        if (savedPermissions) {
+          setPermissionStates(savedPermissions);
+        }
+      })
+      .catch((err) => {
+        console.warn('Permissions sync note:', err);
+      });
+  }, [currentUser?.id]);
 
   const notifyChange = (updated: Partial<PrivacySettings>) => {
     onUpdateSettings(updated);
@@ -115,13 +120,19 @@ export const PrivacySettingsView: React.FC<PrivacySettingsViewProps> = ({
     setTimeout(() => setShowSavedFeedback(false), 2000);
   };
 
-  const togglePermission = (key: string) => {
-    setPermissionStates((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+  // Persistent toggle: saves immediately to Firestore users/{uid}/settings
+  const togglePermission = async (key: string) => {
+    const updated = {
+      ...permissionStates,
+      [key]: !permissionStates[key],
+    };
+    setPermissionStates(updated);
     setShowSavedFeedback(true);
     setTimeout(() => setShowSavedFeedback(false), 1800);
+
+    if (currentUser?.id) {
+      await saveUserPermissions(currentUser.id, updated);
+    }
   };
 
   const handleRegisterPasskey = () => {
@@ -134,7 +145,10 @@ export const PrivacySettingsView: React.FC<PrivacySettingsViewProps> = ({
     }, 1800);
   };
 
-  const handleUnlinkDevice = (deviceId: string) => {
+  const handleUnlinkDevice = async (deviceId: string) => {
+    if (currentUser?.id) {
+      await unlinkUserDevice(currentUser.id, deviceId);
+    }
     setLinkedDevices((prev) => prev.filter((d) => d.id !== deviceId));
     setShowSavedFeedback(true);
     setTimeout(() => setShowSavedFeedback(false), 1800);
@@ -413,6 +427,33 @@ export const PrivacySettingsView: React.FC<PrivacySettingsViewProps> = ({
                 className="w-5 h-5 accent-emerald-500 rounded cursor-pointer"
               />
             </div>
+
+            {/* Account & Session Management */}
+            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-4 space-y-3">
+              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Account & Authentication
+              </h2>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Active Firebase Session</h3>
+                  <p className="text-xs text-slate-400 font-mono truncate max-w-[200px]">
+                    UID: {currentUser.id || 'Active'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  id="settings-logout-btn"
+                  onClick={async () => {
+                    await signOutUser();
+                    onSignOut?.();
+                  }}
+                  className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Log Out</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -541,50 +582,67 @@ export const PrivacySettingsView: React.FC<PrivacySettingsViewProps> = ({
 
             {/* Connected Sessions List */}
             <div className="space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Currently Connected Devices ({linkedDevices.length})
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Currently Connected Devices ({linkedDevices.length})
+                </h3>
+                <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  Firebase Live-Data Only
+                </span>
+              </div>
 
-              {linkedDevices.map((dev) => (
-                <div
-                  key={dev.id}
-                  className="bg-slate-850 border border-slate-800 rounded-2xl p-4 flex items-center justify-between hover:border-slate-700 transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 rounded-xl bg-slate-800 text-indigo-400">
-                      {dev.platform === 'web' ? (
-                        <Globe className="w-5 h-5" />
-                      ) : dev.platform === 'desktop' ? (
-                        <Laptop className="w-5 h-5" />
-                      ) : (
-                        <Smartphone className="w-5 h-5" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-semibold text-white">{dev.name}</h4>
-                        {dev.isCurrent && (
-                          <span className="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                            Current Device
-                          </span>
+              {linkedDevices.length === 0 ? (
+                <div id="no-linked-devices-empty-state" className="p-8 text-center bg-slate-850 border border-slate-800 rounded-2xl space-y-3">
+                  <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+                    <Globe className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-white">No linked devices</h4>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                    No secondary sessions or web browsers are currently linked to this Firebase account. Tap "Link a Device" above to connect Yapp It Web or Desktop.
+                  </p>
+                </div>
+              ) : (
+                linkedDevices.map((dev) => (
+                  <div
+                    key={dev.id}
+                    className="bg-slate-850 border border-slate-800 rounded-2xl p-4 flex items-center justify-between hover:border-slate-700 transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 rounded-xl bg-slate-800 text-indigo-400">
+                        {dev.platform === 'web' ? (
+                          <Globe className="w-5 h-5" />
+                        ) : dev.platform === 'desktop' ? (
+                          <Laptop className="w-5 h-5" />
+                        ) : (
+                          <Smartphone className="w-5 h-5" />
                         )}
                       </div>
-                      <p className="text-xs text-slate-400 mt-0.5">{dev.browserOrOs}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{dev.lastActive} • {dev.location}</p>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-semibold text-white">{dev.name}</h4>
+                          {dev.isCurrent && (
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                              Current Device
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">{dev.browserOrOs}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{dev.lastActive} • {dev.location}</p>
+                      </div>
                     </div>
-                  </div>
 
-                  {!dev.isCurrent && (
-                    <button
-                      type="button"
-                      onClick={() => handleUnlinkDevice(dev.id)}
-                      className="text-xs text-red-400 hover:text-red-300 font-semibold px-2.5 py-1 rounded-lg hover:bg-red-500/10 transition-colors"
-                    >
-                      Log Out
-                    </button>
-                  )}
-                </div>
-              ))}
+                    {!dev.isCurrent && (
+                      <button
+                        type="button"
+                        onClick={() => handleUnlinkDevice(dev.id)}
+                        className="text-xs text-red-400 hover:text-red-300 font-semibold px-2.5 py-1 rounded-lg hover:bg-red-500/10 transition-colors"
+                      >
+                        Log Out
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Progressive Web App (PWA) & Offline Status */}

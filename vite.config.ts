@@ -22,10 +22,10 @@ export default defineConfig({
       manifest: {
         id: '/',
         name: 'Yapp It',
-        short_name: 'Yapp It',
-        description: 'Instant messaging, group connectivity, and high-clarity calling platform with end-to-end encryption.',
-        theme_color: '#020617',
-        background_color: '#020617',
+        short_name: 'Yapp',
+        description: 'Real-time instant messaging and high-clarity calling platform with end-to-end encryption.',
+        theme_color: '#075E54',
+        background_color: '#075E54',
         display: 'standalone',
         orientation: 'portrait-primary',
         start_url: '/',
@@ -101,14 +101,25 @@ export default defineConfig({
         ],
       },
       devOptions: {
-        enabled: true,
-        type: 'module',
+        enabled: false,
       },
     }),
   ],
   server: {
     host: '0.0.0.0',
     port: 3000,
+    strictPort: true,
+    watch: {
+      ignored: [
+        '**/dev-dist/**',
+        '**/dist/**',
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/firestore.rules',
+        '**/firebase-*.json',
+        '**/firebase_*.json'
+      ],
+    },
   },
 });
 

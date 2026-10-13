@@ -14,11 +14,11 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { CallLog, Chat, User } from '../types';
-import { INITIAL_USERS } from '../data/mockData';
 
 interface CallsHistoryViewProps {
   callLogs: CallLog[];
   chats: Chat[];
+  registeredUsers?: User[];
   onStartCallWithChat: (chat: Chat, type: 'audio' | 'video') => void;
   onStartCallWithUser: (user: User, type: 'audio' | 'video') => void;
   onBack?: () => void;
@@ -27,6 +27,7 @@ interface CallsHistoryViewProps {
 export const CallsHistoryView = ({
   callLogs,
   chats,
+  registeredUsers = [],
   onStartCallWithChat,
   onStartCallWithUser,
   onBack,
@@ -51,7 +52,14 @@ export const CallsHistoryView = ({
     if (matchingChat) {
       onStartCallWithChat(matchingChat, log.type);
     } else {
-      const matchingUser = INITIAL_USERS.find((u) => u.name === log.name) || INITIAL_USERS[0];
+      const matchingUser = registeredUsers.find((u) => u.name === log.name) || {
+        id: `call-user-${Date.now()}`,
+        name: log.name,
+        avatar: log.avatar,
+        phone: '',
+        about: '',
+        isOnline: false,
+      };
       onStartCallWithUser(matchingUser, log.type);
     }
   };
@@ -242,7 +250,12 @@ export const CallsHistoryView = ({
             </p>
 
             <div className="flex-1 overflow-y-auto divide-y divide-slate-800/80 my-2">
-              {INITIAL_USERS.map((user) => (
+              {registeredUsers.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400">
+                  No contacts found yet. Use "New Chat" to invite friends or import device contacts!
+                </div>
+              ) : (
+                registeredUsers.map((user) => (
                 <div
                   key={user.id}
                   className="p-2.5 flex items-center justify-between hover:bg-slate-800/80 rounded-xl transition-colors"
@@ -282,7 +295,7 @@ export const CallsHistoryView = ({
                     </button>
                   </div>
                 </div>
-              ))}
+              )))}
             </div>
           </div>
         </div>

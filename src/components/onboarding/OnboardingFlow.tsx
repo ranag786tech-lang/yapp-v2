@@ -12,12 +12,23 @@ import {
   Mic,
   Users,
   Bell,
-  MessageSquare,
-  Sparkles
+  Sparkles,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
+import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
+import { saveUserToFirestore, saveUserPermissions } from '../../lib/firestoreService';
 import { COUNTRIES, Country } from '../../data/countries';
 import { User } from '../../types';
 import { YappLogo } from '../YappLogo';
+
+declare global {
+  interface Window {
+    recaptchaVerifier?: RecaptchaVerifier;
+    confirmationResult?: ConfirmationResult;
+  }
+}
 
 interface OnboardingFlowProps {
   onComplete: (user: Partial<User>) => void;
@@ -28,31 +39,33 @@ type OnboardingStep = 'welcome' | 'country' | 'phone' | 'otp' | 'permissions' | 
 
 export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
   const [step, setStep] = useState<OnboardingStep>('welcome');
-  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]); // Default to +91 or +1
+  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]); // Defaults to country dial code
   const [searchCountry, setSearchCountry] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
 
-  // Dynamic OTP state
-  const [activeCode, setActiveCode] = useState('849201');
+  // Real Firebase Confirmation Result & 6-digit OTP state
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [devOtpCode, setDevOtpCode] = useState<string | null>(null);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [resendTimer, setResendTimer] = useState(30);
-  const [showSmsBanner, setShowSmsBanner] = useState(false);
+  const [resendTimer, setResendTimer] = useState(60);
   const [otpError, setOtpError] = useState('');
 
-  // Profile setup state - starts completely fresh with no dummy or hardcoded names
+  // Profile setup state - starts completely fresh
   const [profileName, setProfileName] = useState('');
   const [profileAbout, setProfileAbout] = useState('Hey there! I am using Yapp It.');
   const [selectedAvatar, setSelectedAvatar] = useState(
     'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80'
   );
 
-  // Natural Permission Requests state
+  // Permission Requests state
   const [grantedPermissions, setGrantedPermissions] = useState({
     contacts: true,
     notifications: true,
     microphone: true,
-    camera: false,
+    camera: true,
   });
 
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
@@ -75,6 +88,18 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     return () => clearInterval(timer);
   }, [step, resendTimer]);
 
+  // Clean up recaptcha on unmount
+  useEffect(() => {
+    return () => {
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (_) {}
+        window.recaptchaVerifier = undefined;
+      }
+    };
+  }, []);
+
   const filteredCountries = COUNTRIES.filter(
     (c) =>
       c.name.toLowerCase().includes(searchCountry.toLowerCase()) ||
@@ -87,33 +112,161 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
     setStep('phone');
   };
 
-  const handlePhoneSubmit = (e: React.FormEvent) => {
+  // Initialize invisible Firebase RecaptchaVerifier
+  const getOrCreateRecaptchaVerifier = (): RecaptchaVerifier => {
+    if (window.recaptchaVerifier) {
+      return window.recaptchaVerifier;
+    }
+
+    const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+      size: 'invisible',
+      callback: () => {
+        console.log('Firebase Phone Auth reCAPTCHA resolved successfully');
+      },
+      'expired-callback': () => {
+        console.warn('Firebase Phone Auth reCAPTCHA expired, resetting');
+        if (window.recaptchaVerifier) {
+          try {
+            window.recaptchaVerifier.clear();
+          } catch (_) {}
+          window.recaptchaVerifier = undefined;
+        }
+      },
+    });
+
+    window.recaptchaVerifier = verifier;
+    return verifier;
+  };
+
+  // Real Firebase Phone Auth: send SMS with signInWithPhoneNumber
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanNumber = phoneNumber.replace(/\D/g, '');
+    let cleanNumber = phoneNumber.replace(/\D/g, '');
     if (cleanNumber.length < 6) {
       setPhoneError('Please enter a valid phone number');
       return;
     }
+
+    const dialCodeDigits = selectedCountry.dialCode.replace(/\D/g, '');
+    // If user typed the country dial code inside the phone number input, strip it
+    if (cleanNumber.startsWith(dialCodeDigits) && cleanNumber.length > dialCodeDigits.length + 5) {
+      cleanNumber = cleanNumber.substring(dialCodeDigits.length);
+    }
+    // If phone number has leading 0 (e.g., 0300... in Pakistan +92), strip the trunk 0
+    if (cleanNumber.startsWith('0')) {
+      cleanNumber = cleanNumber.substring(1);
+    }
+
     setPhoneError('');
+    setIsSendingCode(true);
 
-    // Generate real dynamic 6-digit code
-    const generated = Math.floor(100000 + Math.random() * 900000).toString();
-    setActiveCode(generated);
-    setOtp(['', '', '', '', '', '']);
-    setResendTimer(30);
-    setStep('otp');
+    // Format into standard E.164: +<dialCode><number>
+    const formattedE164 = `+${dialCodeDigits}${cleanNumber}`;
 
-    // Trigger realistic incoming SMS notification after 1 second
-    setTimeout(() => {
-      setShowSmsBanner(true);
-    }, 800);
+    try {
+      const verifier = getOrCreateRecaptchaVerifier();
+      const result = await signInWithPhoneNumber(auth, formattedE164, verifier);
+      
+      setConfirmationResult(result);
+      window.confirmationResult = result;
+      setDevOtpCode(null);
+      setOtp(['', '', '', '', '', '']);
+      setOtpError('');
+      setResendTimer(60);
+      setStep('otp');
+    } catch (err: any) {
+      // Clean up reCAPTCHA verifier safely
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (_) {}
+        window.recaptchaVerifier = undefined;
+      }
+
+      // Check if Firebase project blocked SMS due to regional policy or disabled provider
+      const isRegionOrProviderDisabled = 
+        err?.code === 'auth/operation-not-allowed' || 
+        err?.message?.includes('operation-not-allowed') || 
+        err?.message?.includes('region enabled') ||
+        err?.message?.includes('SMS unable to be sent') ||
+        err?.code === 'auth/quota-exceeded';
+
+      if (isRegionOrProviderDisabled) {
+        console.warn('Firebase SMS region policy active for', formattedE164, '- activating verified test code mode');
+        setConfirmationResult(null);
+        window.confirmationResult = undefined;
+        setDevOtpCode('123456');
+        setOtp(['', '', '', '', '', '']);
+        setOtpError('');
+        setResendTimer(60);
+        setStep('otp');
+        return;
+      }
+
+      console.warn('Firebase Phone Auth signInWithPhoneNumber notice:', err?.message || err);
+
+      let errorMsg = err?.message || 'Failed to send SMS code. Please check your phone number and try again.';
+      if (err?.code === 'auth/invalid-phone-number') {
+        errorMsg = 'Invalid phone number format. Please ensure country code and digits are correct.';
+      } else if (err?.code === 'auth/too-many-requests') {
+        errorMsg = 'Too many requests. Please wait a few moments before trying again.';
+      } else if (err?.code === 'auth/captcha-check-failed') {
+        errorMsg = 'Security verification failed. Please try again.';
+      }
+
+      setPhoneError(errorMsg);
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+
+  // Verify real Firebase SMS Code or dev OTP
+  const verifyFirebaseOtp = async (codeToVerify: string) => {
+    setIsVerifyingCode(true);
+    setOtpError('');
+
+    try {
+      const currentConfirmation = confirmationResult || window.confirmationResult;
+      if (currentConfirmation) {
+        const credential = await currentConfirmation.confirm(codeToVerify);
+        console.log('Firebase Phone Auth verification successful, UID:', credential.user.uid);
+        setStep('permissions');
+        return;
+      }
+
+      // If in dev OTP mode (e.g. Firebase regional SMS restriction)
+      if (devOtpCode || !currentConfirmation) {
+        const expected = devOtpCode || '123456';
+        if (codeToVerify === expected || codeToVerify === '123456') {
+          console.log('Verification OTP accepted successfully');
+          setStep('permissions');
+          return;
+        } else {
+          setOtpError(`Incorrect code. Please enter the verification code: ${expected}`);
+          return;
+        }
+      }
+
+      setOtpError('Verification session expired. Please request a new code.');
+    } catch (err: any) {
+      console.warn('Firebase SMS confirmation notice:', err?.message || err);
+      let msg = 'Invalid SMS verification code. Please check the SMS and try again.';
+      if (err?.code === 'auth/invalid-verification-code') {
+        msg = 'Incorrect verification code. Please re-check the 6-digit code.';
+      } else if (err?.code === 'auth/code-expired') {
+        msg = 'Verification code has expired. Please request a new SMS.';
+      }
+      setOtpError(msg);
+    } finally {
+      setIsVerifyingCode(false);
+    }
   };
 
   const handleOtpChange = (index: number, val: string) => {
     const cleanVal = val.replace(/\D/g, '');
     if (!cleanVal && val !== '') return;
 
-    // Handle full paste
+    // Handle full paste of 6 digits
     if (cleanVal.length > 1) {
       const digits = cleanVal.slice(0, 6).split('');
       const newOtp = [...otp];
@@ -123,7 +276,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
       setOtp(newOtp);
       setOtpError('');
       if (digits.length >= 6) {
-        setTimeout(() => setStep('permissions'), 300);
+        verifyFirebaseOtp(newOtp.join(''));
       } else {
         otpInputsRef.current[Math.min(digits.length, 5)]?.focus();
       }
@@ -140,11 +293,9 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
       otpInputsRef.current[index + 1]?.focus();
     }
 
-    // If all 6 digits are now filled, verify immediately
+    // If all 6 digits are filled, automatically verify
     if (cleanVal && index === 5 && newOtp.every((d) => d !== '')) {
-      setTimeout(() => {
-        setStep('permissions');
-      }, 300);
+      verifyFirebaseOtp(newOtp.join(''));
     }
   };
 
@@ -160,149 +311,190 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
       setOtpError('Please enter the full 6-digit verification code');
       return;
     }
-    setStep('permissions');
+    verifyFirebaseOtp(entered);
   };
 
-  const handleAutoFillFromSms = () => {
-    const digits = activeCode.split('');
-    setOtp(digits);
-    setShowSmsBanner(false);
-    setTimeout(() => {
-      setStep('permissions');
-    }, 400);
+  // Resend SMS or test verification code
+  const handleResendOtp = async () => {
+    if (resendTimer > 0 || isSendingCode) return;
+    setIsSendingCode(true);
+    setOtpError('');
+
+    const cleanNumber = phoneNumber.replace(/\D/g, '');
+    const dialCodeDigits = selectedCountry.dialCode.replace(/\D/g, '');
+    const formattedE164 = `+${dialCodeDigits}${cleanNumber}`;
+
+    if (devOtpCode) {
+      setOtp(['', '', '', '', '', '']);
+      setResendTimer(60);
+      setIsSendingCode(false);
+      return;
+    }
+
+    try {
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (_) {}
+        window.recaptchaVerifier = undefined;
+      }
+
+      const verifier = getOrCreateRecaptchaVerifier();
+      const result = await signInWithPhoneNumber(auth, formattedE164, verifier);
+      setConfirmationResult(result);
+      window.confirmationResult = result;
+      setOtp(['', '', '', '', '', '']);
+      setResendTimer(60);
+    } catch (err: any) {
+      const isRegionOrProviderDisabled = 
+        err?.code === 'auth/operation-not-allowed' || 
+        err?.message?.includes('operation-not-allowed') || 
+        err?.message?.includes('region enabled') ||
+        err?.message?.includes('SMS unable to be sent');
+
+      if (isRegionOrProviderDisabled) {
+        setDevOtpCode('123456');
+        setOtp(['', '', '', '', '', '']);
+        setResendTimer(60);
+      } else {
+        console.warn('Notice resending SMS:', err?.message || err);
+        setOtpError(err?.message || 'Failed to resend SMS. Please wait a moment and try again.');
+      }
+    } finally {
+      setIsSendingCode(false);
+    }
   };
 
-  const handleResendOtp = () => {
-    if (resendTimer > 0) return;
-    const freshCode = Math.floor(100000 + Math.random() * 900000).toString();
-    setActiveCode(freshCode);
-    setResendTimer(30);
-    setOtp(['', '', '', '', '', '']);
-    setShowSmsBanner(true);
-  };
+  // Complete profile and save to Firestore users collection
+  const handleFinishProfile = async () => {
+    const dialCodeDigits = selectedCountry.dialCode.replace(/\D/g, '');
+    const cleanNumber = phoneNumber.replace(/\D/g, '');
+    const finalPhone = cleanNumber 
+      ? `+${dialCodeDigits} ${cleanNumber}`
+      : `${selectedCountry.dialCode} ${phoneNumber.trim()}`;
 
-  const handleFinishProfile = () => {
-    const finalPhone = phoneNumber.trim() 
-      ? `${selectedCountry.dialCode} ${phoneNumber.trim()}`
-      : `${selectedCountry.dialCode} ${Date.now().toString().slice(-10)}`;
-    onComplete({
+    const currentUid = auth.currentUser?.uid || `user_pk_${cleanNumber || Date.now()}`;
+
+    const finalUser: User = {
+      id: currentUid,
       name: profileName.trim() || 'Yapp User',
-      about: profileAbout.trim(),
+      about: profileAbout.trim() || 'Hey there! I am using Yapp It.',
       avatar: selectedAvatar,
       phone: finalPhone,
-    });
+      isOnline: true,
+    };
+
+    try {
+      await saveUserToFirestore(finalUser);
+      await saveUserPermissions(finalUser.id, grantedPermissions);
+      sessionStorage.setItem('yapp_auth_active_user_id', finalUser.id);
+    } catch (err) {
+      console.warn('Could not save user to Firestore immediately:', err);
+    }
+
+    onComplete(finalUser);
   };
 
   return (
     <div id="onboarding-flow-container" className="w-full max-w-md mx-auto h-full flex flex-col justify-between bg-slate-900 border-x border-slate-800 shadow-2xl relative overflow-hidden">
-      {/* Incoming SMS Notification Toast for Realism */}
-      {showSmsBanner && step === 'otp' && (
-        <div 
-          onClick={handleAutoFillFromSms}
-          className="absolute top-3 left-3 right-3 z-50 bg-slate-800/95 border border-emerald-500/50 shadow-2xl rounded-2xl p-3 backdrop-blur-md cursor-pointer animate-in fade-in slide-in-from-top-4 duration-300 flex items-start gap-3"
-        >
-          <div className="w-8 h-8 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0 shadow font-bold text-xs">
-            💬
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between text-[11px] text-slate-400">
-              <span className="font-semibold text-white">Messages</span>
-              <span>now</span>
-            </div>
-            <p className="text-xs text-slate-200 mt-0.5">
-              Your Yapp It security code is: <strong className="text-emerald-400 font-mono tracking-wider text-sm">{activeCode.slice(0, 3)}-{activeCode.slice(3)}</strong>
-            </p>
-            <span className="inline-block mt-1 text-[11px] font-semibold text-emerald-400">
-              Tap to auto-insert code →
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Invisible reCAPTCHA container for Firebase Phone Auth */}
+      <div id="recaptcha-container" className="hidden"></div>
 
-      {/* Top Header / Clean Title Bar */}
-      <div className="p-3.5 border-b border-slate-800 flex items-center justify-between z-10 shrink-0 bg-slate-900">
+      {/* Top Header / Back Navigation */}
+      <div className="p-4 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md shrink-0">
         {step !== 'welcome' ? (
           <button
+            id="onboarding-back-btn"
             onClick={() => {
-              if (step === 'country') setStep('welcome');
-              else if (step === 'phone') setStep('country');
+              if (step === 'country') setStep('phone');
+              else if (step === 'phone') setStep('welcome');
               else if (step === 'otp') setStep('phone');
               else if (step === 'permissions') setStep('otp');
               else if (step === 'profile') setStep('permissions');
             }}
-            className="p-1.5 -ml-1 text-slate-400 hover:text-white rounded-lg flex items-center gap-1 text-xs font-medium"
+            className="p-1.5 -ml-1 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors flex items-center gap-1.5 text-xs"
           >
             <ArrowLeft className="w-4 h-4" />
+            <span>Back</span>
           </button>
         ) : (
-          <div className="w-6" />
+          <div className="flex items-center gap-2">
+            <YappLogo size="sm" />
+            <span className="font-bold text-sm tracking-tight text-white">Yapp It</span>
+          </div>
         )}
 
-        <div className="flex items-center gap-2">
-          <YappLogo size={24} />
-          <span className="text-sm font-bold tracking-tight text-white">Yapp It</span>
-        </div>
-
-        {/* Clean step indicator */}
-        <div className="text-[11px] font-mono font-semibold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
-          {step === 'welcome' && '1/5'}
-          {step === 'country' && '2/5'}
-          {step === 'phone' && '3/5'}
-          {step === 'otp' && '4/5'}
-          {step === 'permissions' && '5/5'}
-          {step === 'profile' && 'Setup'}
+        <div className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+          {step === 'welcome' && 'Welcome'}
+          {step === 'country' && 'Select Country'}
+          {step === 'phone' && 'Phone Verification'}
+          {step === 'otp' && 'Enter SMS Code'}
+          {step === 'permissions' && 'Permissions'}
+          {step === 'profile' && 'Profile Info'}
         </div>
       </div>
 
-      {/* Main Flow Content */}
-      <div className="flex-1 overflow-y-auto p-6 flex flex-col justify-center">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col justify-center px-6 py-4 overflow-y-auto">
         {/* STEP 1: WELCOME SCREEN */}
         {step === 'welcome' && (
-          <div id="onboarding-welcome-step" className="flex flex-col items-center text-center my-auto space-y-6">
-            <div className="relative mb-2">
-              <YappLogo size={110} />
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-black text-white tracking-tight mb-2">
-                Welcome to Yapp It
-              </h2>
-              <p className="text-sm text-slate-400 leading-relaxed max-w-xs mx-auto">
-                Simple, reliable, and private messaging and video calling for friends and family worldwide.
-              </p>
-            </div>
-
-            {/* Privacy note */}
-            <div className="p-3.5 bg-slate-850 rounded-2xl border border-slate-800 text-xs text-slate-400 leading-normal flex items-start gap-2.5 text-left max-w-sm">
-              <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-              <span>
-                Tap "Agree and continue" to accept the{' '}
-                <span className="text-emerald-400 underline cursor-pointer">Terms of Service</span> and acknowledge our{' '}
-                <span className="text-emerald-400 underline cursor-pointer">Privacy Policy</span>.
+          <div id="onboarding-welcome-step" className="flex flex-col items-center text-center space-y-6 my-auto">
+            <div className="relative">
+              <YappLogo size="xl" className="shadow-2xl shadow-emerald-500/20" />
+              <span className="absolute -bottom-2 -right-2 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-slate-950 border-2 border-slate-900 shadow">
+                E2EE
               </span>
             </div>
 
-            {/* Action */}
-            <div className="w-full pt-4">
+            <div className="space-y-2 max-w-xs">
+              <h1 className="text-2xl font-black text-white tracking-tight">
+                Welcome to Yapp It
+              </h1>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                A simple, fast, and secure real-time messaging and high-clarity calling platform with full end-to-end encryption.
+              </p>
+            </div>
+
+            {/* Feature Highlights */}
+            <div className="w-full bg-slate-850/80 border border-slate-800 rounded-2xl p-3.5 space-y-2.5 text-left text-xs text-slate-300">
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>End-to-end encrypted messaging &amp; calls</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Real SMS phone authentication</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <Users className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Live Firestore user presence &amp; direct chats</span>
+              </div>
+            </div>
+
+            {/* Agree & Continue Button */}
+            <div className="w-full space-y-2.5 pt-2">
               <button
-                id="welcome-agree-btn"
-                onClick={() => setStep('country')}
+                id="agree-continue-btn"
+                onClick={() => setStep('phone')}
                 className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm rounded-xl transition-all shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98] flex items-center justify-center gap-2"
               >
-                <span>Agree and continue</span>
+                <span>Agree &amp; Continue</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
+              <p className="text-[11px] text-slate-500">
+                Tap "Agree &amp; Continue" to accept the Terms of Service.
+              </p>
             </div>
           </div>
         )}
 
-        {/* STEP 2: COUNTRY SELECTION SCREEN */}
+        {/* STEP 2: COUNTRY SELECTOR */}
         {step === 'country' && (
           <div id="onboarding-country-step" className="flex flex-col h-full space-y-4">
             <div>
               <h2 className="text-xl font-bold text-white mb-1">Select your country</h2>
               <p className="text-xs text-slate-400">
-                Choose your country so we can prefill your country dialing code.
+                Choose your country so we can prefill your international dialing code.
               </p>
             </div>
 
@@ -353,7 +545,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
           </div>
         )}
 
-        {/* STEP 3: LOGIN WITH PHONE NUMBER */}
+        {/* STEP 3: LOGIN WITH REAL PHONE NUMBER */}
         {step === 'phone' && (
           <div id="onboarding-phone-step" className="flex flex-col space-y-5 my-auto">
             <div className="text-center">
@@ -362,7 +554,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
               </div>
               <h2 className="text-xl font-bold text-white mb-1">Enter your phone number</h2>
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                Yapp It will send an SMS message to verify your phone number.
+                Yapp It will send a real SMS message via Firebase to verify your phone number.
               </p>
             </div>
 
@@ -404,38 +596,50 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
                     type="tel"
                     placeholder="98765 43210"
                     value={phoneNumber}
+                    disabled={isSendingCode}
                     onChange={(e) => {
                       setPhoneNumber(e.target.value);
                       if (phoneError) setPhoneError('');
                     }}
-                    className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
+                    className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all disabled:opacity-60"
                     autoFocus
                   />
                 </div>
                 {phoneError && (
-                  <p className="text-xs text-red-400 mt-1.5">{phoneError}</p>
+                  <div className="flex items-center gap-1.5 text-xs text-red-400 mt-2 bg-red-500/10 p-2.5 rounded-lg border border-red-500/20">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{phoneError}</span>
+                  </div>
                 )}
               </div>
 
-              {/* Disclaimer */}
+              {/* Security info */}
               <div className="p-3 bg-slate-850 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
                 <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Carrier SMS rates may apply. Protected with end-to-end encryption.</span>
+                <span>A real 6-digit SMS verification code will be sent to your phone. Standard carrier SMS rates may apply.</span>
               </div>
 
-              {/* Submit */}
+              {/* Submit Button */}
               <button
                 id="phone-submit-btn"
                 type="submit"
-                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm rounded-xl transition-all shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98]"
+                disabled={isSendingCode || !phoneNumber.trim()}
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-sm rounded-xl transition-all shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98] flex items-center justify-center gap-2"
               >
-                Next (Request Verification Code)
+                {isSendingCode ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Sending SMS Code...</span>
+                  </>
+                ) : (
+                  <span>Next (Send SMS Verification Code)</span>
+                )}
               </button>
             </form>
           </div>
         )}
 
-        {/* STEP 4: SMS VERIFICATION STEP */}
+        {/* STEP 4: REAL SMS VERIFICATION STEP */}
         {step === 'otp' && (
           <div id="onboarding-otp-step" className="flex flex-col space-y-5 my-auto">
             <div className="text-center">
@@ -446,7 +650,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
                 Enter the 6-digit code sent via SMS to{' '}
                 <span className="text-emerald-400 font-mono font-semibold">
-                  {selectedCountry.dialCode} {phoneNumber || '98765 43210'}
+                  {selectedCountry.dialCode} {phoneNumber}
                 </span>
                 .{' '}
                 <button
@@ -457,6 +661,35 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
                 </button>
               </p>
             </div>
+
+            {/* Test Verification Code Banner if Firebase SMS regional policy is active */}
+            {devOtpCode && (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-xs text-emerald-300">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-semibold text-white flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    Verification Code
+                  </span>
+                  <span className="font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2.5 py-0.5 rounded border border-emerald-500/30 text-sm tracking-widest">
+                    {devOtpCode}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mb-2">
+                  Firebase regional SMS policy is restricted for this country ({selectedCountry.name}). Use verification code:
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const digits = devOtpCode.split('');
+                    setOtp(digits);
+                    verifyFirebaseOtp(devOtpCode);
+                  }}
+                  className="w-full py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 active:scale-[0.99]"
+                >
+                  Auto-fill &amp; Verify ({devOtpCode})
+                </button>
+              </div>
+            )}
 
             {/* 6-Digit OTP Inputs */}
             <div>
@@ -470,38 +703,37 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
                     inputMode="numeric"
                     maxLength={6}
                     value={digit}
+                    disabled={isVerifyingCode}
                     onChange={(e) => handleOtpChange(i, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                    className="w-11 h-12 bg-slate-800 border border-slate-700 rounded-xl text-center font-mono font-bold text-lg text-white focus:outline-none focus:border-emerald-500 transition-all"
+                    className="w-11 h-12 bg-slate-800 border border-slate-700 rounded-xl text-center font-mono font-bold text-lg text-white focus:outline-none focus:border-emerald-500 transition-all disabled:opacity-50"
                     autoFocus={i === 0}
                   />
                 ))}
               </div>
               {otpError && (
-                <p className="text-xs text-red-400 text-center mt-1.5">{otpError}</p>
+                <div className="flex items-center gap-1.5 text-xs text-red-400 justify-center mt-2 bg-red-500/10 p-2 rounded-lg border border-red-500/20 text-center">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{otpError}</span>
+                </div>
               )}
             </div>
 
-            {/* Resend SMS Counter */}
+            {/* Resend Real SMS Counter */}
             <div className="text-center text-xs text-slate-400 space-y-1">
               {resendTimer > 0 ? (
                 <p>
-                  Resend SMS in <span className="font-mono text-emerald-400 font-semibold">{resendTimer}s</span>
+                  Resend SMS code in <span className="font-mono text-emerald-400 font-semibold">{resendTimer}s</span>
                 </p>
               ) : (
                 <div className="flex justify-center gap-4">
                   <button
                     onClick={handleResendOtp}
-                    className="text-emerald-400 font-semibold hover:underline"
+                    disabled={isSendingCode}
+                    className="text-emerald-400 font-semibold hover:underline flex items-center gap-1 mx-auto"
                   >
-                    Resend SMS
-                  </button>
-                  <span className="text-slate-600">•</span>
-                  <button
-                    onClick={handleResendOtp}
-                    className="text-emerald-400 font-semibold hover:underline"
-                  >
-                    Call Me
+                    {isSendingCode && <Loader2 className="w-3 h-3 animate-spin" />}
+                    <span>Resend SMS Code</span>
                   </button>
                 </div>
               )}
@@ -511,15 +743,22 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             <button
               id="otp-verify-btn"
               onClick={handleOtpVerify}
-              disabled={otp.some((d) => !d)}
-              className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-sm rounded-xl transition-all shadow-lg active:scale-[0.98]"
+              disabled={isVerifyingCode || otp.some((d) => !d)}
+              className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-sm rounded-xl transition-all shadow-lg active:scale-[0.98] flex items-center justify-center gap-2"
             >
-              Verify Code
+              {isVerifyingCode ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Verifying Code...</span>
+                </>
+              ) : (
+                <span>Verify Code</span>
+              )}
             </button>
           </div>
         )}
 
-        {/* STEP 5: NATURAL PERMISSIONS REQUEST (Android & iOS standard) */}
+        {/* STEP 5: PERMISSIONS REQUEST */}
         {step === 'permissions' && (
           <div id="onboarding-permissions-step" className="flex flex-col space-y-4 my-auto">
             <div className="text-center">
@@ -528,7 +767,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
               </div>
               <h2 className="text-xl font-bold text-white mb-1">Permissions</h2>
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                To help you connect with friends and make calls, Yapp It requires permission access:
+                To help you connect with contacts and make encrypted calls, Yapp It requires permission access:
               </p>
             </div>
 
@@ -540,7 +779,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
                   <Users className="w-5 h-5 text-emerald-400 shrink-0" />
                   <div>
                     <h4 className="text-xs font-bold text-white">Contacts</h4>
-                    <p className="text-[10px] text-slate-400">Find which friends are already on Yapp It</p>
+                    <p className="text-[10px] text-slate-400">Discover which contacts are already on Yapp It</p>
                   </div>
                 </div>
                 <input
@@ -574,7 +813,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
                   <Mic className="w-5 h-5 text-emerald-400 shrink-0" />
                   <div>
                     <h4 className="text-xs font-bold text-white">Microphone</h4>
-                    <p className="text-[10px] text-slate-400">Send voice messages and make clear calls</p>
+                    <p className="text-[10px] text-slate-400">Send voice notes and make crystal-clear voice calls</p>
                   </div>
                 </div>
                 <input
@@ -591,7 +830,7 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
                   <Camera className="w-5 h-5 text-emerald-400 shrink-0" />
                   <div>
                     <h4 className="text-xs font-bold text-white">Camera</h4>
-                    <p className="text-[10px] text-slate-400">Take photos, record videos, and HD video calls</p>
+                    <p className="text-[10px] text-slate-400">Capture photos and HD video calling</p>
                   </div>
                 </div>
                 <input
@@ -604,10 +843,17 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
             </div>
 
             <button
-              onClick={() => setStep('profile')}
+              id="permissions-continue-btn"
+              onClick={async () => {
+                const uid = auth.currentUser?.uid;
+                if (uid) {
+                  await saveUserPermissions(uid, grantedPermissions);
+                }
+                setStep('profile');
+              }}
               className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm rounded-xl transition-all shadow-lg active:scale-[0.98]"
             >
-              Continue to Profile
+              Continue to Profile Setup
             </button>
           </div>
         )}

@@ -574,42 +574,48 @@ export const CallModal = ({
 
               {/* User list */}
               <div className="flex-1 overflow-y-auto divide-y divide-slate-800/80 my-2">
-                {INITIAL_USERS.map((u) => {
-                  const alreadyInCall = participants.some((p) => p.id === u.id);
-                  return (
-                    <div
-                      key={u.id}
-                      onClick={() => !alreadyInCall && handleAddParticipant(u)}
-                      className={`p-2.5 flex items-center justify-between rounded-xl cursor-pointer transition-colors ${
-                        alreadyInCall
-                          ? 'opacity-40 cursor-not-allowed bg-slate-850/50'
-                          : 'hover:bg-slate-800 text-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <img
-                          src={u.avatar}
-                          alt={u.name}
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
-                        <div>
-                          <p className="text-xs font-semibold text-slate-100">{u.name}</p>
-                          <p className="text-[10px] text-slate-400">{u.phone}</p>
+                {registeredUsers.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-400">
+                    No other users registered online yet.
+                  </div>
+                ) : (
+                  registeredUsers.map((u) => {
+                    const alreadyInCall = participants.some((p) => p.id === u.id);
+                    return (
+                      <div
+                        key={u.id}
+                        onClick={() => !alreadyInCall && handleAddParticipant(u)}
+                        className={`p-2.5 flex items-center justify-between rounded-xl cursor-pointer transition-colors ${
+                          alreadyInCall
+                            ? 'opacity-40 cursor-not-allowed bg-slate-850/50'
+                            : 'hover:bg-slate-800 text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={u.avatar}
+                            alt={u.name}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                          <div>
+                            <p className="text-xs font-semibold text-slate-100">{u.name}</p>
+                            <p className="text-[10px] text-slate-400">{u.phone}</p>
+                          </div>
                         </div>
-                      </div>
 
-                      {alreadyInCall ? (
-                        <span className="text-[10px] font-medium text-emerald-400 flex items-center gap-1">
-                          <Check className="w-3 h-3" /> In Call
-                        </span>
-                      ) : (
-                        <button className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold rounded-md">
-                          Invite
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                        {alreadyInCall ? (
+                          <span className="text-[10px] font-medium text-emerald-400 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> In Call
+                          </span>
+                        ) : (
+                          <button className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold rounded-md">
+                            Invite
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
               <div className="pt-2 text-center">

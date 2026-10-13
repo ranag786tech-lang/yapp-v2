@@ -13,10 +13,12 @@ import {
   Plus,
   X,
   Upload,
-  UserCheck
+  UserCheck,
+  Loader2
 } from 'lucide-react';
 import { User, DeviceContact } from '../types';
 import { matchPhoneNumbers, formatPhoneNumber } from '../lib/phoneUtils';
+import { searchUserByPhoneInFirestore } from '../lib/firestoreService';
 
 interface NewChatModalProps {
   currentUser: User;
@@ -48,6 +50,8 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [newContactName, setNewContactName] = useState('');
   const [newContactPhone, setNewContactPhone] = useState('');
+  const [isCheckingFirestore, setIsCheckingFirestore] = useState(false);
+  const [checkResult, setCheckResult] = useState<{ user: User | null; checkedPhone: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [pickerStatus, setPickerStatus] = useState<string | null>(null);
 
@@ -204,21 +208,32 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
     reader.readAsText(file);
   };
 
-  // Add Contact manually
-  const handleAddManualContact = (e: React.FormEvent) => {
+  // Add Contact manually and query Firestore in real-time
+  const handleAddManualContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newContactName.trim() || !newContactPhone.trim()) return;
+    if (!newContactPhone.trim()) return;
+
+    setIsCheckingFirestore(true);
+    setCheckResult(null);
+
+    const foundUser = await searchUserByPhoneInFirestore(newContactPhone.trim());
+    setIsCheckingFirestore(false);
+
+    setCheckResult({
+      user: foundUser,
+      checkedPhone: newContactPhone.trim(),
+    });
 
     const contact: DeviceContact = {
-      id: `manual-${Date.now()}`,
-      name: newContactName.trim(),
+      id: foundUser?.id || `manual-${Date.now()}`,
+      name: newContactName.trim() || foundUser?.name || 'Contact',
       phone: newContactPhone.trim(),
     };
 
-    setDeviceContacts((prev) => [contact, ...prev]);
-    setNewContactName('');
-    setNewContactPhone('');
-    setShowAddContactModal(false);
+    setDeviceContacts((prev) => {
+      const existing = prev.filter((p) => p.phone.replace(/\D/g, '') !== contact.phone.replace(/\D/g, ''));
+      return [contact, ...existing];
+    });
   };
 
   // Share Yapp It with friends
@@ -576,8 +591,64 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
             </div>
 
             <p className="text-xs text-slate-400">
-              Enter contact's name and mobile number. Yapp It will verify in real time if they have created an account.
+              Enter contact's name and mobile number. Yapp It will verify against your live Firestore database if this user exists.
             </p>
+
+            {checkResult && (
+              <div className="p-3 rounded-2xl border transition-all text-xs">
+                {checkResult.user ? (
+                  <div className="space-y-2.5 bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl text-emerald-300">
+                    <div className="flex items-center gap-2 font-bold text-white">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>Found in Firestore database!</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={checkResult.user.avatar}
+                        alt={checkResult.user.name}
+                        className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-white text-sm truncate">{checkResult.user.name}</p>
+                        <p className="text-slate-400 text-xs font-mono">{checkResult.user.phone}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddContactModal(false);
+                        setCheckResult(null);
+                        onSelectUser(checkResult.user!);
+                      }}
+                      className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl transition-colors shadow flex items-center justify-center gap-1.5"
+                    >
+                      <span>Start Chat With {checkResult.user.name}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2 bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl text-amber-200">
+                    <p className="font-semibold text-white">Not on Yapp It yet</p>
+                    <p className="text-[11px] text-amber-300/80">
+                      No user found in Firestore with phone <span className="font-mono">{checkResult.checkedPhone}</span>. Contact saved to device list.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleInviteContact({
+                          id: `invite-${Date.now()}`,
+                          name: newContactName || 'Friend',
+                          phone: checkResult.checkedPhone,
+                        });
+                      }}
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>Send Invite to Join</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             <form onSubmit={handleAddManualContact} className="space-y-3">
               <div>
@@ -607,7 +678,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
               <div className="pt-2 flex items-center justify-between gap-3">
                 <label className="cursor-pointer text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
                   <Upload className="w-3.5 h-3.5" />
-                  <span>Import .vcf file</span>
+                  <span>Import .vcf</span>
                   <input
                     type="file"
                     accept=".vcf,.csv"
@@ -619,16 +690,21 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowAddContactModal(false)}
+                    onClick={() => {
+                      setShowAddContactModal(false);
+                      setCheckResult(null);
+                    }}
                     className="px-3 py-1.5 text-xs text-slate-400 hover:text-white rounded-xl"
                   >
-                    Cancel
+                    Close
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-md"
+                    disabled={isCheckingFirestore || !newContactPhone.trim()}
+                    className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-md flex items-center gap-1"
                   >
-                    Save &amp; Check
+                    {isCheckingFirestore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>Check Firestore</span>
                   </button>
                 </div>
               </div>
