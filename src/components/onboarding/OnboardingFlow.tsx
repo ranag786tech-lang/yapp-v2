@@ -397,8 +397,6 @@ export const OnboardingFlow = ({ onComplete }: OnboardingFlowProps) => {
 
   return (
     <div id="onboarding-flow-container" className="w-full max-w-md mx-auto h-full flex flex-col justify-between bg-slate-900 border-x border-slate-800 shadow-2xl relative overflow-hidden">
-      {/* Invisible reCAPTCHA container for Firebase Phone Auth */}
-      <div id="recaptcha-container" className="hidden"></div>
 
       {/* Top Header / Back Navigation */}
       <div className="p-4 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md shrink-0">

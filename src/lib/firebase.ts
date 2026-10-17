@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import { 
   getAuth, 
   onAuthStateChanged, 
@@ -17,6 +18,9 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
   : getFirestore(app);
+
+// Initialize Firebase Storage
+export const storage = getStorage(app);
 
 // Initialize Firebase Authentication
 export const auth = getAuth(app);
